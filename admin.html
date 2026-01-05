@@ -1,20 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOVE Client | 雲端後台</title>
+    <style>
+        :root { --main-pink: #ffb6c1; --hover-pink: #ff8c94; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #fff5f7; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); width: 100%; max-width: 600px; }
+        h1 { color: var(--main-pink); text-align: center; margin-bottom: 20px; }
+        .input-group { margin-bottom: 15px; }
+        input { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #eee; border-radius: 10px; box-sizing: border-box; outline: none; }
+        input:focus { border-color: var(--main-pink); }
+        button { width: 100%; padding: 12px; border: none; border-radius: 10px; background: var(--main-pink); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        button:hover { background: var(--hover-pink); transform: translateY(-2px); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f9f9f9; }
+        th { color: #888; font-size: 14px; }
+        .del-btn { background: #ff4d4d; padding: 5px 10px; font-size: 12px; width: auto; margin: 0; }
+        .status { text-align: center; color: #aaa; font-size: 12px; margin-top: 10px; }
+        .tag { padding: 2px 8px; border-radius: 5px; font-size: 12px; background: #eee; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>💖 LOVE Client 後台</h1>
+    <div class="input-group">
+        <input type="password" id="token" placeholder="在此輸入 GitHub Token (僅用於網頁操作)">
+        <button onclick="loadList()">🔍 讀取雲端名單</button>
+    </div>
+
+    <div id="adminPanel" style="display:none;">
+        <hr style="border: 0.5px solid #eee; margin: 20px 0;">
+        <h3>新增玩家</h3>
+        <input type="text" id="newName" placeholder="玩家 ID">
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="newColor" placeholder="顏色 (d)" value="d" style="width:30%">
+            <input type="text" id="newPrefix" placeholder="前綴 (★)" style="width:70%">
+        </div>
+        <button onclick="addPlayer()">➕ 新增到雲端</button>
+
+        <h3>目前名單</h3>
+        <table id="playerTable">
+            <thead>
+                <tr><th>玩家 ID</th><th>顏色/前綴</th><th>操作</th></tr>
+            </thead>
+            <tbody id="listBody"></tbody>
+        </table>
+    </div>
+    <div id="status" class="status">請輸入 Token 以進行連線</div>
+</div>
+
 <script>
     const config = {
         owner: "duvbeOvO",
         repo: "my-client-repo",
-        path: "main/config/verified_players.txt", // 配合你的路徑，保留 main/ 資料夾 
+        path: "main/config/verified_players.txt", // 配合你的 Raw URL 路徑
         branch: "main"
     };
     let currentSha = "";
     let playerList = [];
 
-    // 讀取名單
     async function loadList() {
         const token = document.getElementById('token').value.trim();
         const status = document.getElementById('status');
-        if(!token) return alert("請輸入 Token 進行驗證！");
+        if(!token) return alert("請輸入 Token！");
 
-        status.innerText = "驗證並載入中...";
+        status.innerText = "正在驗證並讀取...";
         const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.path}?ref=${config.branch}`;
         
         try {
@@ -29,50 +82,13 @@
                 renderTable();
                 document.getElementById('adminPanel').style.display = "block";
                 status.innerText = "讀取成功！";
-            } else {
-                throw new Error("找不到檔案路徑");
-            }
+            } else { throw new Error(); }
         } catch (err) {
-            alert("讀取失敗，請確認 Token 是否正確！");
+            alert("驗證失敗，請檢查 Token 權限！");
             status.innerText = "驗證失敗";
         }
     }
 
-    // 同步到雲端 [cite: 1, 10]
-    async function updateGitHub(msg) {
-        const token = document.getElementById('token').value.trim();
-        const status = document.getElementById('status');
-        const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.path}`;
-        
-        status.innerText = "同步中...";
-        const newContent = playerList.join('\n');
-        const encodedContent = btoa(unescape(encodeURIComponent(newContent)));
-
-        const res = await fetch(url, {
-            method: "PUT",
-            headers: { 
-                "Authorization": `token ${token}`,
-                "Accept": "application/vnd.github.v3+json" 
-            },
-            body: JSON.stringify({
-                message: msg,
-                content: encodedContent,
-                sha: currentSha,
-                branch: config.branch
-            })
-        });
-
-        if(res.ok) {
-            const data = await res.json();
-            currentSha = data.content.sha;
-            renderTable();
-            status.innerText = "同步成功！";
-        } else {
-            alert("同步失敗，請檢查權限！");
-        }
-    }
-    
-    // 渲染表格 (保持原樣即可)
     function renderTable() {
         const body = document.getElementById('listBody');
         body.innerHTML = "";
@@ -87,4 +103,44 @@
             `;
         });
     }
+
+    async function addPlayer() {
+        const name = document.getElementById('newName').value.trim();
+        const color = document.getElementById('newColor').value.trim();
+        const prefix = document.getElementById('newPrefix').value.trim();
+        if(!name) return alert("請輸入玩家 ID");
+        playerList.push(prefix ? `${name}:${color}:${prefix}` : `${name}:${color}`);
+        await updateGitHub("新增玩家: " + name);
+    }
+
+    async function deletePlayer(index) {
+        if(!confirm("確定要刪除？")) return;
+        playerList.splice(index, 1);
+        await updateGitHub("刪除玩家");
+    }
+
+    async function updateGitHub(msg) {
+        const token = document.getElementById('token').value.trim();
+        const status = document.getElementById('status');
+        const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.path}`;
+        
+        status.innerText = "同步中...";
+        const newContent = playerList.join('\n');
+        const encodedContent = btoa(unescape(encodeURIComponent(newContent)));
+
+        const res = await fetch(url, {
+            method: "PUT",
+            headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json" },
+            body: JSON.stringify({ message: msg, content: encodedContent, sha: currentSha, branch: config.branch })
+        });
+
+        if(res.ok) {
+            const data = await res.json();
+            currentSha = data.content.sha;
+            renderTable();
+            status.innerText = "同步成功！";
+        } else { alert("同步失敗！"); }
+    }
 </script>
+</body>
+</html>
