@@ -2,82 +2,167 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>LOVE Client 雲端管理後台</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOVE Client | 雲端後台</title>
     <style>
-        body { font-family: sans-serif; background: #fdfcfc; display: flex; justify-content: center; padding: 50px; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 400px; }
-        h2 { color: #ffb6c1; text-align: center; }
-        input, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #ddd; box-sizing: border-box; }
-        button { background: #ffb6c1; color: white; border: none; cursor: pointer; font-weight: bold; }
-        button:hover { background: #ff8c94; }
-        #status { font-size: 12px; color: gray; text-align: center; }
+        :root { --main-pink: #ffb6c1; --hover-pink: #ff8c94; }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: #fff5f7; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); width: 100%; max-width: 600px; }
+        h1 { color: var(--main-pink); text-align: center; margin-bottom: 20px; }
+        .input-group { margin-bottom: 15px; }
+        input { width: 100%; padding: 12px; margin-top: 5px; border: 1px solid #eee; border-radius: 10px; box-sizing: border-box; outline: none; }
+        input:focus { border-color: var(--main-pink); }
+        button { width: 100%; padding: 12px; border: none; border-radius: 10px; background: var(--main-pink); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        button:hover { background: var(--hover-pink); transform: translateY(-2px); }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f9f9f9; }
+        th { color: #888; font-size: 14px; }
+        .del-btn { background: #ff4d4d; padding: 5px 10px; font-size: 12px; width: auto; margin: 0; }
+        .status { text-align: center; color: #aaa; font-size: 12px; margin-top: 10px; }
+        .tag { padding: 2px 8px; border-radius: 5px; font-size: 12px; background: #eee; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>💖 LOVE Client 管理</h2>
-        <input type="password" id="token" placeholder="貼上你的 GitHub Token (ghp_...)">
-        <hr>
-        <input type="text" id="playerName" placeholder="玩家遊戲 ID">
-        <input type="text" id="playerColor" placeholder="顏色代碼 (例如 d 為粉色)" value="d">
-        <input type="text" id="playerPrefix" placeholder="前綴圖標 (例如 §e★)">
-        <button onclick="updateWhitelist()">✨ 同步到雲端</button>
-        <div id="status">準備就緒</div>
+
+<div class="container">
+    <h1>💖 LOVE Client 後台</h1>
+    
+    <div class="input-group">
+        <input type="password" id="token" placeholder="輸入 GitHub 個人訪問權杖 (Token)">
+        <button onclick="loadList()">🔍 讀取雲端名單</button>
     </div>
 
-    <script>
-        async function updateWhitelist() {
-            const token = document.getElementById('token').value;
-            const name = document.getElementById('playerName').value.trim();
-            const color = document.getElementById('playerColor').value.trim();
-            const prefix = document.getElementById('playerPrefix').value.trim();
-            const status = document.getElementById('status');
+    <hr style="border: 0.5px solid #fcfcfc; margin: 20px 0;">
 
-            if (!token || !name) return alert("Token 和 ID 都要填寫！");
+    <div id="adminPanel" style="display:none;">
+        <h3>新增玩家</h3>
+        <input type="text" id="newName" placeholder="玩家 ID">
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="newColor" placeholder="顏色 (d)" value="d" style="width:30%">
+            <input type="text" id="newPrefix" placeholder="前綴 (★)" style="width:70%">
+        </div>
+        <button onclick="addPlayer()">➕ 新增到白名單</button>
 
-            status.innerText = "正在讀取雲端資料...";
-            const url = "https://api.github.com/repos/duvbeOvO/my-client-repo/contents/main/config/verified_players.txt";
-            const headers = { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json" };
+        <h3>目前名單</h3>
+        <table id="playerTable">
+            <thead>
+                <tr>
+                    <th>玩家 ID</th>
+                    <th>顏色/前綴</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="listBody"></tbody>
+        </table>
+    </div>
+    <div id="status" class="status">請先輸入 Token 進行驗證</div>
+</div>
 
-            try {
-                // 1. 獲取目前內容
-                const res = await fetch(url, { headers });
-                const data = await res.json();
-                const sha = data.sha;
-                let content = decodeURIComponent(escape(atob(data.content))); // 處理中文亂碼
+<script>
+    const config = {
+        owner: "duvbeOvO",
+        repo: "my-client-repo",
+        path: "main/config/verified_players.txt"
+    };
+    let currentSha = "";
+    let playerList = [];
 
-                // 2. 檢查重複
-                if (content.toLowerCase().includes(name.toLowerCase())) {
-                    return alert("該玩家已在名單中！");
-                }
+    async function loadList() {
+        const token = document.getElementById('token').value;
+        const status = document.getElementById('status');
+        if(!token) return alert("請輸入 Token！");
 
-                // 3. 組合新內容 (玩家:顏色:前綴)
-                const newEntry = prefix ? `${name}:${color}:${prefix}` : `${name}:${color}`;
-                content = content.trim() + "\n" + newEntry;
-
-                // 4. 回傳到 GitHub
-                status.innerText = "正在推送到 GitHub...";
-                const putRes = await fetch(url, {
-                    method: "PUT",
-                    headers,
-                    body: JSON.stringify({
-                        message: `Web Admin: Add ${name}`,
-                        content: btoa(unescape(encodeURIComponent(content))), // 處理 UTF-8
-                        sha: sha,
-                        branch: "main"
-                    })
-                });
-
-                if (putRes.ok) {
-                    alert("✅ 成功！白名單已更新。");
-                    status.innerText = "更新成功！";
-                } else {
-                    alert("❌ 失敗，請檢查 Token 權限。");
-                }
-            } catch (err) {
-                alert("連線出錯: " + err);
-            }
+        status.innerText = "載入中...";
+        const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.path}`;
+        
+        try {
+            const res = await fetch(url, {
+                headers: { "Authorization": `token ${token}` }
+            });
+            const data = await res.json();
+            currentSha = data.sha;
+            const content = decodeURIComponent(escape(atob(data.content)));
+            
+            playerList = content.split('\n').filter(line => line.trim() !== "");
+            renderTable();
+            
+            document.getElementById('adminPanel').style.display = "block";
+            status.innerText = "讀取成功！";
+        } catch (err) {
+            alert("讀取失敗，請檢查 Token 是否正確或路徑是否存在。");
+            status.innerText = "驗證失敗";
         }
-    </script>
+    }
+
+    function renderTable() {
+        const body = document.getElementById('listBody');
+        body.innerHTML = "";
+        playerList.forEach((line, index) => {
+            const parts = line.split(':');
+            const name = parts[0];
+            const color = parts[1] || "f";
+            const prefix = parts[2] || "無";
+            
+            body.innerHTML += `
+                <tr>
+                    <td><b>${name}</b></td>
+                    <td><span class="tag">顏色: ${color}</span> <span class="tag">${prefix}</span></td>
+                    <td><button class="del-btn" onclick="deletePlayer(${index})">刪除</button></td>
+                </tr>
+            `;
+        });
+    }
+
+    async function addPlayer() {
+        const name = document.getElementById('newName').value.trim();
+        const color = document.getElementById('newColor').value.trim();
+        const prefix = document.getElementById('newPrefix').value.trim();
+        if(!name) return alert("請輸入 ID");
+
+        const newEntry = prefix ? `${name}:${color}:${prefix}` : `${name}:${color}`;
+        playerList.push(newEntry);
+        await updateGitHub("新增玩家: " + name);
+    }
+
+    async function deletePlayer(index) {
+        if(!confirm("確定要刪除這位玩家嗎？")) return;
+        playerList.splice(index, 1);
+        await updateGitHub("刪除玩家");
+    }
+
+    async function updateGitHub(msg) {
+        const token = document.getElementById('token').value;
+        const status = document.getElementById('status');
+        const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.path}`;
+        
+        status.innerText = "同步到雲端中...";
+        
+        const newContent = playerList.join('\n');
+        const encodedContent = btoa(unescape(encodeURIComponent(newContent)));
+
+        const res = await fetch(url, {
+            method: "PUT",
+            headers: { "Authorization": `token ${token}`, "Accept": "application/vnd.github.v3+json" },
+            body: JSON.stringify({
+                message: msg,
+                content: encodedContent,
+                sha: currentSha,
+                branch: "main"
+            })
+        });
+
+        if(res.ok) {
+            const data = await res.json();
+            currentSha = data.content.sha; // 更新 SHA 才能進行下次操作
+            renderTable();
+            status.innerText = "雲端同步成功！";
+            document.getElementById('newName').value = "";
+        } else {
+            alert("同步失敗！");
+        }
+    }
+</script>
+
 </body>
 </html>
