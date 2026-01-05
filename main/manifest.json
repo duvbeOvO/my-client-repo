@@ -1,0 +1,15 @@
+{
+  "name": "LOVE Client",
+  "title": "LOVE Client 核心系統",
+  "gameVersion": "1.8.9",
+  "files": [
+    {
+      "path": "mods/LoveCore-1.0.jar",
+      "url": "https://raw.githubusercontent.com/duvbeOvO/my-client-repo/main/main/mods/LoveCore-1.0.jar",
+      "update": "REPLACE",
+      "hash": "B282DD571503C361B28AAB284905526300D54460",
+      "required": true,
+      "forceUpdate": true
+    }
+  ]
+}
