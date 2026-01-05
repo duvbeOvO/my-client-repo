@@ -1,10 +1,10 @@
 <script>
-    const config = {
-        owner: "duvbeOvO",
-        repo: "my-client-repo",
-        path: "config/verified_players.txt", // 修正：移除路徑中的 main/
-        branch: "main"
-    };
+const config = {
+    owner: "duvbeOvO",
+    repo: "my-client-repo",
+    path: "config/verified_players.txt", // 修正：這裡不要寫 main/，因為它不是資料夾
+    branch: "main" // 這裡已經指定了 main 分支，所以上面的 path 不用再寫一次
+};
     let currentSha = "";
     let playerList = [];
 
