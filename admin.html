@@ -1,54 +1,50 @@
 <script>
-const config = {
-    owner: "duvbeOvO",
-    repo: "my-client-repo",
-    path: "config/verified_players.txt", // 修正：這裡不要寫 main/，因為它不是資料夾
-    branch: "main" // 這裡已經指定了 main 分支，所以上面的 path 不用再寫一次
-};
+    const config = {
+        owner: "duvbeOvO",
+        repo: "my-client-repo",
+        path: "main/config/verified_players.txt", // 配合你的路徑，保留 main/ 資料夾 
+        branch: "main"
+    };
     let currentSha = "";
     let playerList = [];
 
-    // 讀取名單：使用輸入框中的 Token 進行驗證
+    // 讀取名單
     async function loadList() {
         const token = document.getElementById('token').value.trim();
         const status = document.getElementById('status');
-        if(!token) return alert("請輸入 Token！");
+        if(!token) return alert("請輸入 Token 進行驗證！");
 
-        status.innerText = "驗證中...";
+        status.innerText = "驗證並載入中...";
         const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.path}?ref=${config.branch}`;
         
         try {
             const res = await fetch(url, {
-                headers: { "Authorization": `token ${token}` } // 加入 Token 標頭
+                headers: { "Authorization": `token ${token}` }
             });
-            
-            if (res.status === 401) throw new Error("Token 無效或權限不足");
-            if (res.status === 404) throw new Error("找不到檔案路徑");
-
             const data = await res.json();
-            currentSha = data.sha;
-            // 解碼 Base64 內容
-            const content = decodeURIComponent(escape(atob(data.content)));
-            
-            playerList = content.split('\n').filter(line => line.trim() !== "");
-            renderTable();
-            
-            document.getElementById('adminPanel').style.display = "block";
-            status.innerText = "讀取成功！";
+            if (data.sha) {
+                currentSha = data.sha;
+                const content = decodeURIComponent(escape(atob(data.content)));
+                playerList = content.split('\n').filter(line => line.trim() !== "");
+                renderTable();
+                document.getElementById('adminPanel').style.display = "block";
+                status.innerText = "讀取成功！";
+            } else {
+                throw new Error("找不到檔案路徑");
+            }
         } catch (err) {
-            alert("讀取失敗：" + err.message);
+            alert("讀取失敗，請確認 Token 是否正確！");
             status.innerText = "驗證失敗";
         }
     }
 
-    // 同步到雲端：同樣使用輸入框中的 Token
+    // 同步到雲端 [cite: 1, 10]
     async function updateGitHub(msg) {
         const token = document.getElementById('token').value.trim();
         const status = document.getElementById('status');
         const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.path}`;
         
-        status.innerText = "正在同步到 GitHub...";
-        
+        status.innerText = "同步中...";
         const newContent = playerList.join('\n');
         const encodedContent = btoa(unescape(encodeURIComponent(newContent)));
 
@@ -68,28 +64,24 @@ const config = {
 
         if(res.ok) {
             const data = await res.json();
-            currentSha = data.content.sha; // 更新 SHA 避免下次寫入衝突
+            currentSha = data.content.sha;
             renderTable();
-            status.innerText = "雲端同步成功！";
+            status.innerText = "同步成功！";
         } else {
-            alert("同步失敗！請確認 Token 是否具有 repo 寫入權限。");
+            alert("同步失敗，請檢查權限！");
         }
     }
-
-    // 表格渲染與 ID 處理
+    
+    // 渲染表格 (保持原樣即可)
     function renderTable() {
         const body = document.getElementById('listBody');
         body.innerHTML = "";
         playerList.forEach((line, index) => {
             const parts = line.split(':');
-            const name = parts[0];
-            const color = parts[1] || "f";
-            const prefix = parts[2] || "無";
-            
             body.innerHTML += `
                 <tr>
-                    <td><b>${name}</b></td>
-                    <td><span class="tag">顏色: ${color}</span> <span class="tag">${prefix}</span></td>
+                    <td><b>${parts[0]}</b></td>
+                    <td><span class="tag">顏色: ${parts[1]||'f'}</span> <span class="tag">${parts[2]||'無'}</span></td>
                     <td><button class="del-btn" onclick="deletePlayer(${index})">刪除</button></td>
                 </tr>
             `;
